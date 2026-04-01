@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>立法院：藍白合對戰大魔王</title>
+    <style>
+        :root {
+            --term-green: #0f0;
+            --term-red: #f00;
+            --bg-color: #000;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100dvh;
+            background-color: var(--bg-color);
+            color: var(--term-green);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* CRT 濾鏡掃描線 */
+        #crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* 遊戲主容器 */
+        #game-container {
+            display: flex; flex-direction: column; height: 100dvh;
+        }
+
+        /* 前言區 (Prologue) */
+        #prologue-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 20px; box-sizing: border-box;
+        }
+
+        #prologue-img {
+            max-width: 200px; max-height: 200px;
+            margin-bottom: 20px; transition: all 1s ease;
+        }
+
+        .glow-green { filter: drop-shadow(0 0 15px var(--term-green)); }
+        .glow-red-glitch { filter: drop-shadow(0 0 15px var(--term-red)); animation: glitch 0.3s infinite; }
+
+        #prologue-text { font-size: 1.2rem; min-height: 60px; line-height: 1.5; }
+
+        /* 戰鬥區 (上半部) */
+        #combat-area {
+            flex: 6; display: flex; justify-content: space-around; align-items: center;
+            border-bottom: 2px dashed var(--term-green);
+            padding: 20px; position: relative;
+        }
+
+        .character {
+            display: flex; flex-direction: column; align-items: center;
+            transition: transform 0.2s, opacity 1s, filter 1s;
+        }
+
+        .char-img { max-width: 150px; max-height: 150px; object-fit: contain; }
+        
+        #player-img { transform: scaleX(-1); filter: drop-shadow(0 0 10px var(--term-green)); }
+        #boss-img { filter: drop-shadow(0 0 15px var(--term-red)); }
+
+        .hp-bar { margin-top: 10px; font-weight: bold; text-align: center; }
+
+        /* 對話區 (下半部) */
+        #dialogue-area {
+            flex: 4; display: flex; flex-direction: column;
+            padding: 10px; box-sizing: border-box; overflow: hidden;
+        }
+
+        /* 按鈕區 (在上) */
+        #action-menu {
+            display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;
+            justify-content: center;
+        }
+
+        button {
+            background: #000; color: var(--term-green);
+            border: 1px solid var(--term-green);
+            padding: 10px 15px; font-family: inherit; font-size: 1rem;
+            cursor: pointer; text-transform: uppercase;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--term-green); color: #000;
+        }
+
+        button:disabled {
+            border-color: #333; color: #555; cursor: not-allowed;
+        }
+
+        /* 戰鬥紀錄區 (在下) */
+        #log-box {
+            flex-grow: 1; border: 1px solid var(--term-green);
+            padding: 10px; overflow-y: auto; font-size: 0.9rem;
+            line-height: 1.4; display: flex; flex-direction: column;
+        }
+
+        .log-entry { margin-bottom: 5px; }
+        .log-red { color: var(--term-red); }
+
+        /* 動畫 Classes */
+        @keyframes glitch {
+            0% { transform: skew(0deg); filter: invert(0); }
+            20% { transform: skew(-10deg); filter: invert(1); }
+            40% { transform: skew(10deg); filter: invert(0); }
+            60% { transform: skew(-5deg); filter: invert(1); }
+            80% { transform: skew(5deg); filter: invert(0); }
+            100% { transform: skew(0deg); filter: invert(0); }
+        }
+
+        .anim-glitch { animation: glitch 0.3s forwards; }
+
+        /* 戰敗特效 */
+        .anim-defeated {
+            opacity: 0 !important;
+            filter: grayscale(1) !important;
+            transform: translateY(100vh) !important;
+        }
+
+        /* RWD Dash 動畫 (PC X軸, 手機 Y軸) */
+        .anim-dash-forward { transform: translateX(50px) scaleX(-1); }
+        .anim-dash-back { transform: translateX(0) scaleX(-1); }
+        
+        .anim-dash-forward-boss { transform: translateX(-50px); }
+        .anim-dash-back-boss { transform: translateX(0); }
+
+        @media (max-width: 768px) {
+            #combat-area { flex-direction: column-reverse; justify-content: center; gap: 20px; }
+            .anim-dash-forward { transform: translateY(-50px) scaleX(-1); }
+            .anim-dash-forward-boss { transform: translateY(50px); }
+            #player-img { max-width: 120px; }
+            #boss-img { max-width: 120px; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="crt-overlay"></div>
+
+    <div id="prologue-overlay">
+        <img id="prologue-img" src="https://raw.githubusercontent.com/hxj1028-boop/2d/main/image-removebg-preview%20(1).png" class="glow-green">
+        <div id="prologue-text"></div>
+    </div>
+
+    <div id="game-container" style="display: none;">
+        <div id="combat-area">
+            <div class="character" id="player-char">
+                <img id="player-img" class="char-img" src="https://raw.githubusercontent.com/hxj1028-boop/2d/main/image-removebg-preview%20(1).png">
+                <div class="hp-bar">藍白聯軍<br>HP: <span id="player-hp-text">150</span>/150</div>
+            </div>
+            <div class="character" id="boss-char">
+                <img id="boss-img" class="char-img" src="https://raw.githubusercontent.com/hxj1028-boop/2d/main/image-removebg-preview.png">
+                <div class="hp-bar">大魔王<br>HP: <span id="boss-hp-text">10000</span>/10000</div>
+            </div>
+        </div>
+
+        <div id="dialogue-area">
+            <div id="action-menu">
+                <button id="btn-atk" onclick="useSkill('atk')">嗡嗡嗡<br>(CD: 0)</button>
+                <button id="btn-heavy" onclick="useSkill('heavy')">五漢廢言<br>(CD: <span id="cd-heavy">0</span>)</button>
+                <button id="btn-stun" onclick="useSkill('stun')">發大財<br>(CD: <span id="cd-stun">0</span>)</button>
+                <button id="btn-heal" onclick="useSkill('heal')">點亮台灣<br>(CD: 0)</button>
+            </div>
+            <div id="log-box"></div>
+        </div>
+    </div>
+
+    <script>
+        // 核心狀態
+        const state = {
+            player: { hp: 150, maxHp: 150, atk: 700 },
+            boss: { hp: 10000, maxHp: 10000, atk: 35 },
+            cd: { heavy: 0, stun: 0 },
+            bossStunned: false,
+            isAnimating: false,
+            gameOver: false
+        };
+
+        // 輔助函式
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const forceReflow = el => void el.offsetWidth;
+        const logBox = document.getElementById('log-box');
+
+        function addLog(text, isRed = false) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry' + (isRed ? ' log-red' : '');
+            entry.innerText = `> ${text}`;
+            logBox.appendChild(entry);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function updateUI() {
+            document.getElementById('player-hp-text').innerText = state.player.hp;
+            document.getElementById('boss-hp-text').innerText = state.boss.hp;
+            document.getElementById('cd-heavy').innerText = state.cd.heavy;
+            document.getElementById('cd-stun').innerText = state.cd.stun;
+
+            // 更新按鈕狀態
+            document.getElementById('btn-atk').disabled = state.isAnimating;
+            document.getElementById('btn-heavy').disabled = state.isAnimating || state.cd.heavy > 0;
+            document.getElementById('btn-stun').disabled = state.isAnimating || state.cd.stun > 0;
+            document.getElementById('btn-heal').disabled = state.isAnimating;
+        }
+
+        // 打字機特效
+        async function typeWriter(text, element) {
+            element.innerText = '';
+            for (let i = 0; i < text.length; i++) {
+                element.innerText += text.charAt(i);
+                await sleep(50);
+            }
+            await sleep(1500);
+        }
+
+        // 開場前言邏輯
+        async function runPrologue() {
+            const proImg = document.getElementById('prologue-img');
+            const proText = document.getElementById('prologue-text');
+
+            await typeWriter('深夜的立法院，柯P與韓總正在挑燈研讀憲法...', proText);
+            
+            proImg.style.opacity = 0;
+            await sleep(1000);
+            
+            // 更新：切換為大魔王圖片
+            proImg.src = 'https://raw.githubusercontent.com/hxj1028-boop/2d/main/image-removebg-preview.png';
+            proImg.className = 'glow-red-glitch';
+            proImg.style.opacity = 1;
+            
+            await typeWriter('突然間，強大的執政氣場入侵，大魔王降臨了！', proText);
+
+            document.getElementById('prologue-overlay').style.display = 'none';
+            document.getElementById('game-container').style.display = 'flex';
+            addLog("戰鬥開始！請選擇行動。");
+            updateUI();
+        }
+
+        // 戰鬥動畫與特效
+        async function triggerDash(elementId, isBoss = false) {
+            const el = document.getElementById(elementId);
+            const forwardClass = isBoss ? 'anim-dash-forward-boss' : 'anim-dash-forward';
+            const backClass = isBoss ? 'anim-dash-back-boss' : 'anim-dash-back';
+            
+            el.classList.add(forwardClass);
+            await sleep(200);
+            el.classList.remove(forwardClass);
+            el.classList.add(backClass);
+            await sleep(200);
+            el.classList.remove(backClass);
+        }
+
+        async function triggerGlitch(elementId) {
+            const el = document.getElementById(elementId);
+            el.classList.remove('anim-glitch');
+            forceReflow(el); // 強制重繪
+            el.classList.add('anim-glitch');
+            await sleep(300);
+            el.classList.remove('anim-glitch');
+        }
+
+        async function checkDeath() {
+            if (state.boss.hp <= 0) {
+                state.boss.hp = 0;
+                addLog("大魔王被擊敗了！藍白聯軍獲得了勝利！", true);
+                document.getElementById('boss-char').classList.add('anim-defeated');
+                state.gameOver = true;
+                return true;
+            }
+            if (state.player.hp <= 0) {
+                state.player.hp = 0;
+                addLog("藍白聯軍不支倒地... 立法院終究是被大魔王佔領了。", true);
+                document.getElementById('player-char').classList.add('anim-defeated');
+                state.gameOver = true;
+                return true;
+            }
+            return false;
+        }
+
+        // 玩家技能執行
+        async function useSkill(type) {
+            if (state.isAnimating || state.gameOver) return;
+            state.isAnimating = true;
+            updateUI();
+
+            let dmg = 0;
+
+            if (type === 'atk') {
+                dmg = state.player.atk;
+                addLog(`[std::attack] 藍白聯軍發動「嗡嗡嗡」！`);
+                await triggerDash('player-img');
+                await triggerGlitch('boss-img');
+                addLog(`對大魔王造成 ${dmg} 點傷害。`);
+                state.boss.hp -= dmg;
+            } 
+            else if (type === 'heavy') {
+                dmg = state.player.atk * 3;
+                state.cd.heavy = 2;
+                addLog(`[sudo rm -rf /] 藍白聯軍發動「五漢廢言」！`);
+                await triggerDash('player-img');
+                await triggerGlitch('boss-img');
+                addLog(`對大魔王造成毀滅性的 ${dmg} 點傷害！`);
+                state.boss.hp -= dmg;
+            }
+            else if (type === 'stun') {
+                dmg = 150;
+                state.cd.stun = 3;
+                state.bossStunned = true;
+                addLog(`[Ctrl+C] 藍白聯軍高喊「發大財」！`);
+                await triggerDash('player-img');
+                await triggerGlitch('boss-img');
+                addLog(`造成 ${dmg} 點傷害。大魔王陷入暈眩！`);
+                state.boss.hp -= dmg;
+            }
+            else if (type === 'heal') {
+                const healAmt = 60;
+                state.player.hp = Math.min(state.player.maxHp, state.player.hp + healAmt);
+                addLog(`[debug_heal] 藍白聯軍發動「點亮台灣」！恢復了 ${healAmt} 點 HP。`);
+                await sleep(500); // 補血停頓感
+            }
+
+            updateUI();
+            if (await checkDeath()) return;
+
+            await sleep(800);
+            await bossTurn();
+        }
+
+        // 魔王回合
+        async function bossTurn() {
+            if (state.bossStunned) {
+                addLog("大魔王受到「發大財」影響，本回合無法行動！", true);
+                state.bossStunned = false;
+            } else {
+                addLog("大魔王發動強勢輾壓攻擊！", true);
+                await triggerDash('boss-img', true);
+                await triggerGlitch('player-img');
+                
+                // 增加一點傷害浮動
+                const actualDmg = Math.floor(state.boss.atk * (0.8 + Math.random() * 0.4));
+                state.player.hp -= actualDmg;
+                addLog(`藍白聯軍受到了 ${actualDmg} 點傷害。`);
+            }
+
+            // 回合結束，扣除玩家 CD
+            if (state.cd.heavy > 0) state.cd.heavy--;
+            if (state.cd.stun > 0) state.cd.stun--;
+
+            updateUI();
+            if (await checkDeath()) return;
+
+            addLog("--- 回合結束 ---");
+            state.isAnimating = false;
+            updateUI();
+        }
+
+        // 啟動遊戲
+        window.onload = runPrologue;
+
+    </script>
+</body>
+</html>
