@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>立法院：藍白合對戰大魔王</title>
-    <style>
+    
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="./icon-192.png"> <style>
+        /* (原有的 CSS 保持不變) */
         :root {
             --term-green: #0f0;
             --term-red: #f00;
@@ -20,7 +24,6 @@
             user-select: none;
         }
 
-        /* CRT 濾鏡掃描線 */
         #crt-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
@@ -30,12 +33,8 @@
             z-index: 9999;
         }
 
-        /* 遊戲主容器 */
-        #game-container {
-            display: flex; flex-direction: column; height: 100dvh;
-        }
+        #game-container { display: flex; flex-direction: column; height: 100dvh; }
 
-        /* 前言區 (Prologue) */
         #prologue-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 1000;
@@ -50,10 +49,8 @@
 
         .glow-green { filter: drop-shadow(0 0 15px var(--term-green)); }
         .glow-red-glitch { filter: drop-shadow(0 0 15px var(--term-red)); animation: glitch 0.3s infinite; }
-
         #prologue-text { font-size: 1.2rem; min-height: 60px; line-height: 1.5; }
 
-        /* 戰鬥區 (上半部) */
         #combat-area {
             flex: 6; display: flex; justify-content: space-around; align-items: center;
             border-bottom: 2px dashed var(--term-green);
@@ -72,13 +69,11 @@
 
         .hp-bar { margin-top: 10px; font-weight: bold; text-align: center; }
 
-        /* 對話區 (下半部) */
         #dialogue-area {
             flex: 4; display: flex; flex-direction: column;
             padding: 10px; box-sizing: border-box; overflow: hidden;
         }
 
-        /* 按鈕區 (在上) */
         #action-menu {
             display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;
             justify-content: center;
@@ -92,15 +87,9 @@
             transition: background 0.2s, color 0.2s;
         }
 
-        button:hover:not(:disabled) {
-            background: var(--term-green); color: #000;
-        }
+        button:hover:not(:disabled) { background: var(--term-green); color: #000; }
+        button:disabled { border-color: #333; color: #555; cursor: not-allowed; }
 
-        button:disabled {
-            border-color: #333; color: #555; cursor: not-allowed;
-        }
-
-        /* 戰鬥紀錄區 (在下) */
         #log-box {
             flex-grow: 1; border: 1px solid var(--term-green);
             padding: 10px; overflow-y: auto; font-size: 0.9rem;
@@ -110,7 +99,6 @@
         .log-entry { margin-bottom: 5px; }
         .log-red { color: var(--term-red); }
 
-        /* 動畫 Classes */
         @keyframes glitch {
             0% { transform: skew(0deg); filter: invert(0); }
             20% { transform: skew(-10deg); filter: invert(1); }
@@ -122,17 +110,12 @@
 
         .anim-glitch { animation: glitch 0.3s forwards; }
 
-        /* 戰敗特效 */
         .anim-defeated {
-            opacity: 0 !important;
-            filter: grayscale(1) !important;
-            transform: translateY(100vh) !important;
+            opacity: 0 !important; filter: grayscale(1) !important; transform: translateY(100vh) !important;
         }
 
-        /* RWD Dash 動畫 (PC X軸, 手機 Y軸) */
         .anim-dash-forward { transform: translateX(50px) scaleX(-1); }
         .anim-dash-back { transform: translateX(0) scaleX(-1); }
-        
         .anim-dash-forward-boss { transform: translateX(-50px); }
         .anim-dash-back-boss { transform: translateX(0); }
 
@@ -143,7 +126,6 @@
             #player-img { max-width: 120px; }
             #boss-img { max-width: 120px; }
         }
-
     </style>
 </head>
 <body>
@@ -179,7 +161,16 @@
     </div>
 
     <script>
-        // 核心狀態
+        // --- PWA Service Worker 註冊 ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker 註冊成功!', reg))
+                    .catch(err => console.error('Service Worker 註冊失敗!', err));
+            });
+        }
+
+        // --- 遊戲邏輯 (原有的 JS 保持不變) ---
         const state = {
             player: { hp: 150, maxHp: 150, atk: 700 },
             boss: { hp: 10000, maxHp: 10000, atk: 35 },
@@ -189,7 +180,6 @@
             gameOver: false
         };
 
-        // 輔助函式
         const sleep = ms => new Promise(r => setTimeout(r, ms));
         const forceReflow = el => void el.offsetWidth;
         const logBox = document.getElementById('log-box');
@@ -207,15 +197,12 @@
             document.getElementById('boss-hp-text').innerText = state.boss.hp;
             document.getElementById('cd-heavy').innerText = state.cd.heavy;
             document.getElementById('cd-stun').innerText = state.cd.stun;
-
-            // 更新按鈕狀態
             document.getElementById('btn-atk').disabled = state.isAnimating;
             document.getElementById('btn-heavy').disabled = state.isAnimating || state.cd.heavy > 0;
             document.getElementById('btn-stun').disabled = state.isAnimating || state.cd.stun > 0;
             document.getElementById('btn-heal').disabled = state.isAnimating;
         }
 
-        // 打字機特效
         async function typeWriter(text, element) {
             element.innerText = '';
             for (let i = 0; i < text.length; i++) {
@@ -225,35 +212,26 @@
             await sleep(1500);
         }
 
-        // 開場前言邏輯
         async function runPrologue() {
             const proImg = document.getElementById('prologue-img');
             const proText = document.getElementById('prologue-text');
-
             await typeWriter('深夜的立法院，柯P與韓總正在挑燈研讀憲法...', proText);
-            
             proImg.style.opacity = 0;
             await sleep(1000);
-            
-            // 更新：切換為大魔王圖片
             proImg.src = 'https://raw.githubusercontent.com/hxj1028-boop/2d/main/image-removebg-preview.png';
             proImg.className = 'glow-red-glitch';
             proImg.style.opacity = 1;
-            
             await typeWriter('突然間，強大的執政氣場入侵，大魔王降臨了！', proText);
-
             document.getElementById('prologue-overlay').style.display = 'none';
             document.getElementById('game-container').style.display = 'flex';
             addLog("戰鬥開始！請選擇行動。");
             updateUI();
         }
 
-        // 戰鬥動畫與特效
         async function triggerDash(elementId, isBoss = false) {
             const el = document.getElementById(elementId);
             const forwardClass = isBoss ? 'anim-dash-forward-boss' : 'anim-dash-forward';
             const backClass = isBoss ? 'anim-dash-back-boss' : 'anim-dash-back';
-            
             el.classList.add(forwardClass);
             await sleep(200);
             el.classList.remove(forwardClass);
@@ -265,7 +243,7 @@
         async function triggerGlitch(elementId) {
             const el = document.getElementById(elementId);
             el.classList.remove('anim-glitch');
-            forceReflow(el); // 強制重繪
+            forceReflow(el);
             el.classList.add('anim-glitch');
             await sleep(300);
             el.classList.remove('anim-glitch');
@@ -289,14 +267,12 @@
             return false;
         }
 
-        // 玩家技能執行
         async function useSkill(type) {
             if (state.isAnimating || state.gameOver) return;
             state.isAnimating = true;
             updateUI();
 
             let dmg = 0;
-
             if (type === 'atk') {
                 dmg = state.player.atk;
                 addLog(`[std::attack] 藍白聯軍發動「嗡嗡嗡」！`);
@@ -328,17 +304,15 @@
                 const healAmt = 60;
                 state.player.hp = Math.min(state.player.maxHp, state.player.hp + healAmt);
                 addLog(`[debug_heal] 藍白聯軍發動「點亮台灣」！恢復了 ${healAmt} 點 HP。`);
-                await sleep(500); // 補血停頓感
+                await sleep(500);
             }
 
             updateUI();
             if (await checkDeath()) return;
-
             await sleep(800);
             await bossTurn();
         }
 
-        // 魔王回合
         async function bossTurn() {
             if (state.bossStunned) {
                 addLog("大魔王受到「發大財」影響，本回合無法行動！", true);
@@ -347,14 +321,11 @@
                 addLog("大魔王發動強勢輾壓攻擊！", true);
                 await triggerDash('boss-img', true);
                 await triggerGlitch('player-img');
-                
-                // 增加一點傷害浮動
                 const actualDmg = Math.floor(state.boss.atk * (0.8 + Math.random() * 0.4));
                 state.player.hp -= actualDmg;
                 addLog(`藍白聯軍受到了 ${actualDmg} 點傷害。`);
             }
 
-            // 回合結束，扣除玩家 CD
             if (state.cd.heavy > 0) state.cd.heavy--;
             if (state.cd.stun > 0) state.cd.stun--;
 
@@ -366,9 +337,7 @@
             updateUI();
         }
 
-        // 啟動遊戲
         window.onload = runPrologue;
-
     </script>
 </body>
 </html>
